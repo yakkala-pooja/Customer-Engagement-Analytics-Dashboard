@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const BASE_URL = "http://localhost:8000";  // Backend server URL
-const API_KEY = "rIV08bJX2rEKoCeu9fGHd7XVwQkcxA";
+const API_KEY = "YOUR-API-KEY";
 
 const API = {
   getCustomers: () =>
