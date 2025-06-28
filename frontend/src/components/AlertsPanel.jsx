@@ -1,304 +1,254 @@
 import React, { useState, useEffect } from 'react';
 import API from '../services/api';
 
-function AlertsPanel({ customerId }) {
-  const [alertHistory, setAlertHistory] = useState([]);
-  const [alertConfig, setAlertConfig] = useState(null);
+const AlertsPanel = ({ customerId, customerName }) => {
+  const [alertConfig, setAlertConfig] = useState({
+    enabled: false,
+    email_recipients: [],
+    thresholds: {
+      warning_threshold: 0.15,
+      critical_threshold: 0.30,
+      min_anomaly_points: 3,
+      cooldown_minutes: 60
+    }
+  });
+  const [newEmail, setNewEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editConfig, setEditConfig] = useState(null);
+  const [message, setMessage] = useState(null);
+  const [alertHistory, setAlertHistory] = useState([]);
 
   useEffect(() => {
     if (customerId) {
-      fetchAlertData();
+      fetchAlertConfig();
+      fetchAlertHistory();
     }
   }, [customerId]);
 
-  const fetchAlertData = async () => {
-    setIsLoading(true);
-    setError(null);
+  const fetchAlertConfig = async () => {
     try {
-      const [history, config] = await Promise.all([
-        API.getAlertHistory(customerId),
-        API.getAlertConfig(customerId)
-      ]);
-      setAlertHistory(history);
+      setIsLoading(true);
+      const config = await API.getAlertConfig(customerId);
       setAlertConfig(config);
-      setEditConfig(config);
     } catch (err) {
-      setError('Failed to fetch alert data');
+      console.error('Error fetching alert config:', err);
+      setMessage({ type: 'error', text: 'Failed to load alert configuration.' });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleConfigUpdate = async () => {
-    setIsLoading(true);
-    setError(null);
+  const fetchAlertHistory = async () => {
     try {
-      const updatedConfig = await API.updateAlertConfig(customerId, editConfig);
-      setAlertConfig(updatedConfig);
-      setIsEditing(false);
+      const history = await API.getAlertHistory(customerId);
+      setAlertHistory(history);
     } catch (err) {
-      setError('Failed to update alert configuration');
+      console.error('Error fetching alert history:', err);
+    }
+  };
+
+  const saveAlertConfig = async () => {
+    try {
+      setIsLoading(true);
+      await API.setAlertConfig(customerId, alertConfig);
+      setMessage({ type: 'success', text: 'Alert configuration saved successfully!' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      console.error('Error saving alert config:', err);
+      setMessage({ type: 'error', text: 'Failed to save alert configuration.' });
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isLoading) {
-    return <div>Loading alert data...</div>;
-  }
+  const addEmailRecipient = () => {
+    if (newEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      if (!alertConfig.email_recipients.includes(newEmail)) {
+        setAlertConfig({
+          ...alertConfig,
+          email_recipients: [...alertConfig.email_recipients, newEmail]
+        });
+        setNewEmail('');
+      } else {
+        setMessage({ type: 'error', text: 'Email already added.' });
+        setTimeout(() => setMessage(null), 3000);
+      }
+    } else {
+      setMessage({ type: 'error', text: 'Please enter a valid email address.' });
+      setTimeout(() => setMessage(null), 3000);
+    }
+  };
 
-  if (error) {
-    return <div className="error">{error}</div>;
-  }
+  const removeEmailRecipient = (email) => {
+    setAlertConfig({
+      ...alertConfig,
+      email_recipients: alertConfig.email_recipients.filter(e => e !== email)
+    });
+  };
+
+  const handleThresholdChange = (field, value) => {
+    setAlertConfig({
+      ...alertConfig,
+      thresholds: {
+        ...alertConfig.thresholds,
+        [field]: value
+      }
+    });
+  };
+
+  const formatDate = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString();
+    } catch (e) {
+      return dateString;
+    }
+  };
 
   return (
-    <div className="alerts-panel">
-      <h2>Alert Settings</h2>
-      
-      {/* Alert Configuration */}
-      <div className="alert-config">
-        <h3>Alert Configuration</h3>
-        {alertConfig && !isEditing ? (
-          <>
-            <div className="config-display">
-              <p>
-                <strong>Status:</strong> {alertConfig.enabled ? 'Enabled' : 'Disabled'}
-              </p>
-              <p>
-                <strong>Warning Threshold:</strong> {alertConfig.thresholds.warning_threshold * 100}%
-              </p>
-              <p>
-                <strong>Critical Threshold:</strong> {alertConfig.thresholds.critical_threshold * 100}%
-              </p>
-              <p>
-                <strong>Recipients:</strong> {alertConfig.email_recipients.join(', ')}
-              </p>
-              <button 
-                onClick={() => setIsEditing(true)}
-                className="btn-edit"
-              >
-                Edit Configuration
-              </button>
-            </div>
-          </>
-        ) : alertConfig && isEditing ? (
-          <div className="config-form">
-            <label>
-              <input
-                type="checkbox"
-                checked={editConfig.enabled}
-                onChange={(e) => setEditConfig({
-                  ...editConfig,
-                  enabled: e.target.checked
-                })}
-              />
-              Enable Alerts
-            </label>
-            
-            <label>
-              Warning Threshold (%)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={editConfig.thresholds.warning_threshold * 100}
-                onChange={(e) => setEditConfig({
-                  ...editConfig,
-                  thresholds: {
-                    ...editConfig.thresholds,
-                    warning_threshold: e.target.value / 100
-                  }
-                })}
-              />
-            </label>
-            
-            <label>
-              Critical Threshold (%)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={editConfig.thresholds.critical_threshold * 100}
-                onChange={(e) => setEditConfig({
-                  ...editConfig,
-                  thresholds: {
-                    ...editConfig.thresholds,
-                    critical_threshold: e.target.value / 100
-                  }
-                })}
-              />
-            </label>
-            
-            <label>
-              Email Recipients (comma-separated)
-              <input
-                type="text"
-                value={editConfig.email_recipients.join(', ')}
-                onChange={(e) => setEditConfig({
-                  ...editConfig,
-                  email_recipients: e.target.value.split(',').map(email => email.trim())
-                })}
-              />
-            </label>
-            
-            <div className="button-group">
-              <button 
-                onClick={handleConfigUpdate}
-                className="btn-save"
-                disabled={isLoading}
-              >
-                Save Changes
-              </button>
-              <button 
-                onClick={() => {
-                  setIsEditing(false);
-                  setEditConfig(alertConfig);
-                }}
-                className="btn-cancel"
-              >
-                Cancel
-              </button>
-            </div>
+    <div className="card">
+      <div className="card-header">
+        <h3 className="card-title">Alert Configuration {customerName ? `for ${customerName}` : ''}</h3>
+      </div>
+      <div className="card-body">
+        {isLoading ? (
+          <div className="loading">
+            <div className="spinner"></div>
           </div>
         ) : (
-          <p>No alert configuration found</p>
+          <>
+            {message && (
+              <div className={`alert ${message.type === 'error' ? 'alert-error' : 'alert-success'}`}>
+                {message.text}
+              </div>
+            )}
+            
+            <div className="form-group">
+              <label className="form-label">
+                <input 
+                  type="checkbox" 
+                  checked={alertConfig.enabled} 
+                  onChange={e => setAlertConfig({...alertConfig, enabled: e.target.checked})}
+                  className="mr-sm"
+                />
+                Enable Anomaly Alerts
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Email Recipients</label>
+              <div className="flex gap-sm">
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={e => setNewEmail(e.target.value)}
+                  placeholder="Enter email address"
+                  className="form-control"
+                />
+                <button 
+                  onClick={addEmailRecipient}
+                  className="btn"
+                  type="button"
+                >
+                  Add
+                </button>
+              </div>
+              {alertConfig.email_recipients.length > 0 && (
+                <div className="email-list mt-sm">
+                  {alertConfig.email_recipients.map((email, index) => (
+                    <div key={index} className="email-tag">
+                      {email}
+                      <button 
+                        onClick={() => removeEmailRecipient(email)}
+                        className="email-remove"
+                        type="button"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Warning Threshold (%)</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={alertConfig.thresholds.warning_threshold * 100}
+                onChange={e => handleThresholdChange('warning_threshold', parseFloat(e.target.value) / 100)}
+                className="form-control"
+              />
+              <small className="form-text">Percentage of anomalies to trigger a warning alert</small>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Critical Threshold (%)</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={alertConfig.thresholds.critical_threshold * 100}
+                onChange={e => handleThresholdChange('critical_threshold', parseFloat(e.target.value) / 100)}
+                className="form-control"
+              />
+              <small className="form-text">Percentage of anomalies to trigger a critical alert</small>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Minimum Anomaly Points</label>
+              <input
+                type="number"
+                min="1"
+                value={alertConfig.thresholds.min_anomaly_points}
+                onChange={e => handleThresholdChange('min_anomaly_points', parseInt(e.target.value))}
+                className="form-control"
+              />
+              <small className="form-text">Minimum number of anomaly points required to trigger an alert</small>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Cooldown Period (minutes)</label>
+              <input
+                type="number"
+                min="1"
+                value={alertConfig.thresholds.cooldown_minutes}
+                onChange={e => handleThresholdChange('cooldown_minutes', parseInt(e.target.value))}
+                className="form-control"
+              />
+              <small className="form-text">Minimum time between alerts</small>
+            </div>
+
+            <button 
+              onClick={saveAlertConfig}
+              className="btn"
+              disabled={isLoading}
+            >
+              Save Configuration
+            </button>
+          </>
         )}
       </div>
 
-      {/* Alert History */}
-      <div className="alert-history">
-        <h3>Alert History</h3>
-        {alertHistory.length > 0 ? (
-          <div className="history-list">
+      {alertHistory.length > 0 && (
+        <div className="mt-lg">
+          <div className="section-header">
+            <h4>Alert History</h4>
+          </div>
+          <div className="alert-history">
             {alertHistory.map((alert, index) => (
-              <div 
-                key={index} 
-                className={`alert-item ${alert.severity}`}
-              >
-                <div className="alert-header">
-                  <span className="severity">{alert.severity.toUpperCase()}</span>
-                  <span className="timestamp">
-                    {new Date(alert.timestamp).toLocaleString()}
-                  </span>
-                </div>
-                <div className="alert-details">
-                  <p><strong>Anomaly Percentage:</strong> {alert.details.anomaly_percentage}%</p>
-                  <p><strong>Anomaly Count:</strong> {alert.details.anomaly_count}</p>
-                  <p><strong>Total Points:</strong> {alert.details.total_points}</p>
-                </div>
+              <div key={index} className={`alert-item ${alert.severity === 'critical' ? 'alert-critical' : 'alert-warning'}`}>
+                <div className="alert-time">{formatDate(alert.timestamp)}</div>
+                <div className="alert-message">{alert.message}</div>
+                <div className="alert-severity">{alert.severity}</div>
               </div>
             ))}
           </div>
-        ) : (
-          <p>No alert history found</p>
-        )}
-      </div>
-
-      <style jsx>{`
-        .alerts-panel {
-          padding: 1rem;
-          background: #f5f5f5;
-          border-radius: 8px;
-          margin-top: 2rem;
-        }
-
-        .alert-config, .alert-history {
-          margin-top: 1rem;
-          padding: 1rem;
-          background: white;
-          border-radius: 4px;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-
-        .config-form label {
-          display: block;
-          margin: 1rem 0;
-        }
-
-        .config-form input[type="number"],
-        .config-form input[type="text"] {
-          width: 100%;
-          padding: 0.5rem;
-          margin-top: 0.25rem;
-          border: 1px solid #ddd;
-          border-radius: 4px;
-        }
-
-        .button-group {
-          margin-top: 1rem;
-          display: flex;
-          gap: 1rem;
-        }
-
-        .btn-save, .btn-edit {
-          background: #2e7d32;
-          color: white;
-          border: none;
-          padding: 0.5rem 1rem;
-          border-radius: 4px;
-          cursor: pointer;
-        }
-
-        .btn-cancel {
-          background: #666;
-          color: white;
-          border: none;
-          padding: 0.5rem 1rem;
-          border-radius: 4px;
-          cursor: pointer;
-        }
-
-        .history-list {
-          max-height: 400px;
-          overflow-y: auto;
-        }
-
-        .alert-item {
-          margin: 0.5rem 0;
-          padding: 1rem;
-          border-radius: 4px;
-          border-left: 4px solid;
-        }
-
-        .alert-item.warning {
-          background: #fff3e0;
-          border-left-color: #ff9800;
-        }
-
-        .alert-item.critical {
-          background: #fdecea;
-          border-left-color: #f44336;
-        }
-
-        .alert-header {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 0.5rem;
-        }
-
-        .severity {
-          font-weight: bold;
-        }
-
-        .timestamp {
-          color: #666;
-          font-size: 0.9em;
-        }
-
-        .error {
-          color: #d32f2f;
-          padding: 1rem;
-          background: #fdecea;
-          border-radius: 4px;
-          margin: 1rem 0;
-        }
-      `}</style>
+        </div>
+      )}
     </div>
   );
-}
+};
 
 export default AlertsPanel; 

@@ -23,10 +23,6 @@ const ChartWrapper = ({ data }) => {
         isAnomaly: data.anomalies[i]
       })).sort((a, b) => a.x - b.x);
 
-      // Split into normal and anomaly datasets
-      const normalPoints = dataPoints.filter(point => !point.isAnomaly);
-      const anomalyPoints = dataPoints.filter(point => point.isAnomaly);
-
       // Cleanup previous chart instance
       if (chartRef.current) {
         chartRef.current.destroy();
@@ -38,26 +34,34 @@ const ChartWrapper = ({ data }) => {
         data: {
           datasets: [
             {
-              label: 'Normal Engagement',
-              data: normalPoints,
+              label: 'Engagement Score',
+              data: dataPoints,
               borderColor: '#2196f3',
               backgroundColor: 'rgba(33, 150, 243, 0.1)',
               borderWidth: 2,
               fill: true,
               tension: 0.4,
-              pointRadius: 4,
-              pointHoverRadius: 6
-            },
-            {
-              label: 'Anomalies',
-              data: anomalyPoints,
-              borderColor: '#f44336',
-              backgroundColor: '#f44336',
-              borderWidth: 0,
-              pointRadius: 8,
-              pointHoverRadius: 10,
-              pointStyle: 'circle',
-              showLine: false
+              pointRadius: (context) => {
+                // Make anomaly points larger
+                return context.raw.isAnomaly ? 8 : 4;
+              },
+              pointHoverRadius: (context) => {
+                return context.raw.isAnomaly ? 10 : 6;
+              },
+              pointBackgroundColor: (context) => {
+                // Color anomaly points red
+                return context.raw.isAnomaly ? '#f44336' : '#2196f3';
+              },
+              pointBorderColor: (context) => {
+                return context.raw.isAnomaly ? '#f44336' : '#2196f3';
+              },
+              pointStyle: (context) => {
+                // Use a different point style for anomalies
+                return context.raw.isAnomaly ? 'rectRot' : 'circle';
+              },
+              pointBorderWidth: (context) => {
+                return context.raw.isAnomaly ? 2 : 1;
+              }
             }
           ]
         },
@@ -111,7 +115,26 @@ const ChartWrapper = ({ data }) => {
               position: 'top',
               labels: {
                 usePointStyle: true,
-                padding: 15
+                padding: 15,
+                generateLabels: (chart) => {
+                  // Custom legend to show both normal and anomaly points
+                  return [
+                    {
+                      text: 'Normal Data',
+                      fillStyle: '#2196f3',
+                      strokeStyle: '#2196f3',
+                      lineWidth: 1,
+                      pointStyle: 'circle'
+                    },
+                    {
+                      text: 'Anomaly',
+                      fillStyle: '#f44336',
+                      strokeStyle: '#f44336',
+                      lineWidth: 1,
+                      pointStyle: 'rectRot'
+                    }
+                  ];
+                }
               }
             }
           },

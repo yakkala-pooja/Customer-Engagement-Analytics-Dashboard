@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import API from '../services/api';
 import ChartComponent from './ChartComponent';
 import ErrorBoundary from './ErrorBoundary';
+import AlertsPanel from './AlertsPanel';
+import Modal from './ui/Modal';
 import { CSVLink } from 'react-csv';
 
 const RedditAnalytics = () => {
@@ -12,6 +14,9 @@ const RedditAnalytics = () => {
   const [error, setError] = useState(null);
   const [anomalyData, setAnomalyData] = useState(null);
   const [chartKey, setChartKey] = useState(0);
+  const [showAlerts, setShowAlerts] = useState(false);
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [showPostModal, setShowPostModal] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,6 +24,8 @@ const RedditAnalytics = () => {
     setError(null);
     setData(null);
     setAnomalyData(null);
+    setShowAlerts(false);
+    setSelectedPost(null);
     setChartKey(prev => prev + 1);
 
     try {
@@ -109,128 +116,239 @@ const RedditAnalytics = () => {
     }
   };
 
+  const toggleAlerts = () => {
+    setShowAlerts(!showAlerts);
+  };
+
+  // Generate a consistent ID for the subreddit
+  const getSubredditId = () => {
+    return `reddit-${subreddit}`;
+  };
+
+  const handlePostClick = (post) => {
+    setSelectedPost(post);
+    setShowPostModal(true);
+  };
+
+  const closePostModal = () => {
+    setShowPostModal(false);
+  };
+
   return (
-    <div style={{ padding: '2rem' }}>
-      <h2>Reddit Engagement Analytics</h2>
+    <div>
+      <h2 className="text-xl mb-lg">Reddit Engagement Analytics</h2>
       
-      <form onSubmit={handleSubmit} style={{ marginBottom: '2rem' }}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="subreddit" style={{ marginRight: '1rem' }}>
-            Subreddit:
-          </label>
-          <input
-            id="subreddit"
-            type="text"
-            value={subreddit}
-            onChange={(e) => setSubreddit(e.target.value.trim())}
-            placeholder="e.g., programming"
-            required
-            style={{ padding: '0.5rem' }}
-          />
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Search Subreddit</h3>
         </div>
+        <div className="card-body">
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label htmlFor="subreddit" className="form-label">
+                Subreddit Name:
+              </label>
+              <input
+                id="subreddit"
+                type="text"
+                className="form-control"
+                value={subreddit}
+                onChange={(e) => setSubreddit(e.target.value.trim())}
+                placeholder="e.g., programming"
+                required
+              />
+            </div>
 
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="timeframe" style={{ marginRight: '1rem' }}>
-            Timeframe:
-          </label>
-          <select
-            id="timeframe"
-            value={timeframe}
-            onChange={(e) => setTimeframe(e.target.value)}
-            style={{ padding: '0.5rem' }}
-          >
-            <option value="day">Last 24 hours</option>
-            <option value="week">Last week</option>
-            <option value="month">Last month</option>
-            <option value="year">Last year</option>
-          </select>
+            <div className="form-group">
+              <label htmlFor="timeframe" className="form-label">
+                Timeframe:
+              </label>
+              <select
+                id="timeframe"
+                className="form-control"
+                value={timeframe}
+                onChange={(e) => setTimeframe(e.target.value)}
+              >
+                <option value="day">Last 24 hours</option>
+                <option value="week">Last week</option>
+                <option value="month">Last month</option>
+                <option value="year">Last year</option>
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="btn"
+            >
+              {isLoading ? 'Loading...' : 'Analyze'}
+            </button>
+          </form>
         </div>
+      </div>
 
-        <button
-          type="submit"
-          disabled={isLoading}
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: '#1976d2',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: isLoading ? 'wait' : 'pointer',
-          }}
-        >
-          {isLoading ? 'Loading...' : 'Analyze'}
-        </button>
-      </form>
+      {isLoading && (
+        <div className="loading">
+          <div className="spinner"></div>
+        </div>
+      )}
 
       {error && (
-        <div role="alert" style={{ color: '#d32f2f', marginBottom: '1rem', padding: '1rem', backgroundColor: '#ffebee', borderRadius: '4px' }}>
+        <div className="alert alert-error" role="alert">
           {error}
         </div>
       )}
 
       {data && (
-        <div style={{ marginBottom: '2rem' }}>
-          <h3>Subreddit Statistics</h3>
-          <ul>
-            <li>Subscribers: {formatNumber(data.metadata.subscribers)}</li>
-            <li>Active Users: {formatNumber(data.metadata.active_users)}</li>
-            <li>Total Posts Analyzed: {formatNumber(data.post_count)}</li>
-            <li>Average Score: {formatNumber(Math.round(data.average_score))}</li>
-            <li>Average Comments: {formatNumber(Math.round(data.average_comments))}</li>
-          </ul>
-
-          {data.top_posts && data.top_posts.length > 0 && (
-            <div style={{ marginTop: '1rem' }}>
-              <h4>Top Posts</h4>
-              <ul>
-                {data.top_posts.map((post, index) => (
-                  <li key={index}>
-                    <div>
-                      <strong>{post.title}</strong>
-                    </div>
-                    <div style={{ fontSize: '0.9em', color: '#666' }}>
-                      Score: {formatNumber(post.score)} | Comments: {formatNumber(post.comments)} | Posted: {formatDate(post.created_utc)}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">r/{data.metadata.subreddit} Statistics</h3>
+          </div>
+          <div className="card-body">
+            <div className="stats-grid">
+              <div className="stat-item">
+                <div className="stat-value">{formatNumber(data.metadata.subscribers)}</div>
+                <div className="stat-label">Subscribers</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-value">{formatNumber(data.metadata.active_users)}</div>
+                <div className="stat-label">Active Users</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-value">{formatDate(data.metadata.created_utc).split(',')[0]}</div>
+                <div className="stat-label">Created</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-value">{formatNumber(data.post_count)}</div>
+                <div className="stat-label">Posts Analyzed</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-value">{formatNumber(Math.round(data.average_score))}</div>
+                <div className="stat-label">Average Score</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-value">{formatNumber(Math.round(data.average_comments))}</div>
+                <div className="stat-label">Average Comments</div>
+              </div>
             </div>
-          )}
+
+            {data.top_posts && data.top_posts.length > 0 && (
+              <div>
+                <div className="section-header">
+                  <h4>Top Posts</h4>
+                </div>
+                <div className="post-list">
+                  {data.top_posts.slice(0, 5).map((post, index) => (
+                    <div 
+                      key={index} 
+                      className="post-item"
+                      onClick={() => handlePostClick(post)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <h5 className="post-title">
+                        {post.title}
+                      </h5>
+                      <div className="post-meta">
+                        <span className="post-score">{formatNumber(post.score)}</span>
+                        <span className="post-comments">{formatNumber(post.comments)}</span>
+                        <span className="post-date">{formatDate(post.created_utc)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {anomalyData && (
-        <div>
-          <h3>Engagement Anomaly Analysis</h3>
-          <div style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '1rem', marginBottom: '1rem' }}>
-            <ErrorBoundary>
-              <ChartComponent key={chartKey} data={anomalyData} />
-            </ErrorBoundary>
+        <>
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Engagement Anomaly Analysis</h3>
+            </div>
+            <div className="card-body">
+              <ErrorBoundary>
+                <ChartComponent key={chartKey} data={anomalyData} />
+              </ErrorBoundary>
+            </div>
+            <div className="card-footer">
+              <div className="flex justify-between">
+                <CSVLink
+                  data={anomalyData.dates.map((d, i) => ({
+                    date: formatDate(d),
+                    score: anomalyData.engagement_score[i],
+                    anomaly: anomalyData.anomalies[i] ? 'Yes' : 'No',
+                  }))}
+                  filename={`${subreddit}-engagement.csv`}
+                  className="btn"
+                >
+                  Export CSV
+                </CSVLink>
+                
+                <button 
+                  onClick={toggleAlerts}
+                  className="btn-secondary btn"
+                >
+                  {showAlerts ? 'Hide Alerts' : 'Configure Alerts'}
+                </button>
+              </div>
+            </div>
           </div>
-          
-          <div style={{ marginTop: '1rem' }}>
-            <CSVLink
-              data={anomalyData.dates.map((d, i) => ({
-                date: formatDate(d),
-                score: anomalyData.engagement_score[i],
-                anomaly: anomalyData.anomalies[i] ? 'Yes' : 'No',
-              }))}
-              filename={`${subreddit}-engagement.csv`}
-              className="btn"
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#2e7d32',
-                color: 'white',
-                textDecoration: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Export CSV
-            </CSVLink>
-          </div>
-        </div>
+
+          {showAlerts && subreddit && (
+            <AlertsPanel 
+              customerId={getSubredditId()} 
+              customerName={`r/${subreddit}`}
+            />
+          )}
+        </>
       )}
+
+      {/* Post Detail Modal */}
+      <Modal 
+        isOpen={showPostModal} 
+        onClose={closePostModal}
+        title={`Post from r/${subreddit}`}
+      >
+        {selectedPost && (
+          <div className="post-detail">
+            <div className="post-detail-header">
+              <h2 className="post-detail-title">{selectedPost.title}</h2>
+            </div>
+            
+            <div className="post-detail-meta">
+              <div className="post-detail-meta-item">
+                <span>📅</span>
+                <span>Posted: {formatDate(selectedPost.created_utc)}</span>
+              </div>
+              <div className="post-detail-meta-item">
+                <span>⬆️</span>
+                <span>Score: {formatNumber(selectedPost.score)}</span>
+              </div>
+              <div className="post-detail-meta-item">
+                <span>💬</span>
+                <span>Comments: {formatNumber(selectedPost.comments)}</span>
+              </div>
+            </div>
+            
+            {selectedPost.url && (
+              <div className="post-detail-actions">
+                <a 
+                  href={selectedPost.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="post-detail-link"
+                >
+                  <span>🔗</span>
+                  <span>View on Reddit</span>
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

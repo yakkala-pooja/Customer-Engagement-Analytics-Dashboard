@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import API from '../services/api';
 import ChartComponent from './ChartComponent';
 import ErrorBoundary from './ErrorBoundary';
+import AlertsPanel from './AlertsPanel';
 import { CSVLink } from 'react-csv';
 
 const CustomerAnalytics = () => {
@@ -10,6 +11,7 @@ const CustomerAnalytics = () => {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showAlerts, setShowAlerts] = useState(false);
 
   useEffect(() => {
     fetchCustomers();
@@ -29,6 +31,7 @@ const CustomerAnalytics = () => {
     setIsLoading(true);
     setError(null);
     setData(null);
+    setShowAlerts(false);
 
     try {
       const customer = customers.find(c => c.id === customerId);
@@ -61,80 +64,114 @@ const CustomerAnalytics = () => {
     }
   };
 
+  const toggleAlerts = () => {
+    setShowAlerts(!showAlerts);
+  };
+
   return (
-    <div style={{ padding: '2rem' }}>
-      <h2>Customer Engagement Analytics</h2>
+    <div>
+      <h2 className="text-xl mb-lg">Customer Engagement Analytics</h2>
       
-      <div style={{ marginBottom: '2rem' }}>
-        <label htmlFor="customer-select" style={{ marginRight: '1rem' }}>
-          Select Customer:
-        </label>
-        <select
-          id="customer-select"
-          onChange={(e) => handleCustomerSelect(e.target.value)}
-          value={selectedCustomer?.id || ''}
-          style={{ padding: '0.5rem' }}
-        >
-          <option value="">Choose a customer...</option>
-          {customers.map(customer => (
-            <option key={customer.id} value={customer.id}>
-              {customer.name}
-            </option>
-          ))}
-        </select>
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Select Customer</h3>
+        </div>
+        <div className="card-body">
+          <div className="form-group">
+            <label htmlFor="customer-select" className="form-label">
+              Choose a customer to analyze:
+            </label>
+            <select
+              id="customer-select"
+              className="form-control"
+              onChange={(e) => handleCustomerSelect(e.target.value)}
+              value={selectedCustomer?.id || ''}
+            >
+              <option value="">Select a customer...</option>
+              {customers.map(customer => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       {isLoading && (
-        <div>Loading...</div>
+        <div className="loading">
+          <div className="spinner"></div>
+        </div>
       )}
 
       {error && (
-        <div role="alert" style={{ color: '#d32f2f', marginBottom: '1rem', padding: '1rem', backgroundColor: '#ffebee', borderRadius: '4px' }}>
+        <div className="alert alert-error" role="alert">
           {error}
         </div>
       )}
 
       {selectedCustomer && (
-        <div style={{ marginBottom: '2rem' }}>
-          <h3>Customer Information</h3>
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            <li><strong>Name:</strong> {selectedCustomer.name}</li>
-            <li><strong>ID:</strong> {selectedCustomer.id}</li>
-            <li><strong>Email:</strong> {selectedCustomer.email || 'N/A'}</li>
-            <li><strong>Subscription:</strong> {selectedCustomer.subscription_type || 'N/A'}</li>
-          </ul>
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Customer Information</h3>
+          </div>
+          <div className="card-body">
+            <div className="grid grid-cols-2">
+              <div>
+                <p><strong>Name:</strong> {selectedCustomer.name}</p>
+                <p><strong>ID:</strong> {selectedCustomer.id}</p>
+              </div>
+              <div>
+                <p><strong>Email:</strong> {selectedCustomer.email || 'N/A'}</p>
+                <p><strong>Subscription:</strong> {selectedCustomer.subscription_type || 'N/A'}</p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {data && (
-        <div>
-          <h3>Engagement Analysis</h3>
-          <ErrorBoundary>
-            <ChartComponent data={data} />
-          </ErrorBoundary>
-          
-          <div style={{ marginTop: '1rem' }}>
-            <CSVLink
-              data={data.dates.map((d, i) => ({
-                date: d,
-                score: data.engagement_score[i],
-                anomaly: data.anomalies[i] ? 'Yes' : 'No',
-              }))}
-              filename={`${selectedCustomer.name}-engagement.csv`}
-              className="btn"
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#2e7d32',
-                color: 'white',
-                textDecoration: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Export CSV
-            </CSVLink>
+        <>
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Engagement Analysis</h3>
+            </div>
+            <div className="card-body">
+              <ErrorBoundary>
+                <ChartComponent data={data} />
+              </ErrorBoundary>
+            </div>
+            <div className="card-footer">
+              <div className="flex justify-between">
+                <CSVLink
+                  data={data.dates.map((d, i) => ({
+                    date: d,
+                    score: data.engagement_score[i],
+                    anomaly: data.anomalies[i] ? 'Yes' : 'No',
+                  }))}
+                  filename={`${selectedCustomer.name}-engagement.csv`}
+                  className="btn"
+                >
+                  Export CSV
+                </CSVLink>
+                
+                <button 
+                  onClick={toggleAlerts}
+                  className="btn-secondary btn"
+                >
+                  {showAlerts ? 'Hide Alerts' : 'Configure Alerts'}
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+
+          {showAlerts && selectedCustomer && (
+            <AlertsPanel 
+              customerId={selectedCustomer.id} 
+              customerName={selectedCustomer.name}
+            />
+          )}
+        </>
       )}
     </div>
   );
