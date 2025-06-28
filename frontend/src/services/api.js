@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const BASE_URL = "http://localhost:8000";  // Backend server URL
-const API_KEY = "YOUR-API-KEY";
+const API_KEY = "rIV08bJX2rEKoCeu9fGHd7XVwQkcxA";
 
 const API = {
   getCustomers: () =>
@@ -65,33 +65,66 @@ const API = {
   },
 
   async getAlertHistory(customerId = null) {
-    const url = customerId 
-      ? `${BASE_URL}/alerts/history?customer_id=${customerId}`
-      : `${BASE_URL}/alerts/history`;
-    const response = await fetch(url, {
-      headers: {
-        'X-API-Key': API_KEY
+    try {
+      const url = customerId 
+        ? `${BASE_URL}/alerts/history?customer_id=${customerId}&limit=10`
+        : `${BASE_URL}/alerts/history?limit=10`;
+      const response = await fetch(url, {
+        headers: {
+          'X-API-Key': API_KEY
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch alert history');
       }
-    });
-    if (!response.ok) {
-      throw new Error('Failed to fetch alert history');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching alert history:', error);
+      return [];
     }
-    return response.json();
   },
 
   async getAlertConfig(customerId) {
-    const response = await fetch(`${BASE_URL}/alerts/config/${customerId}`, {
-      headers: {
-        'X-API-Key': API_KEY
+    try {
+      const response = await fetch(`${BASE_URL}/alerts/config/${customerId}`, {
+        headers: {
+          'X-API-Key': API_KEY
+        }
+      });
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Return default config if none exists
+          return {
+            enabled: false,
+            email_recipients: [],
+            thresholds: {
+              warning_threshold: 0.15,
+              critical_threshold: 0.30,
+              min_anomaly_points: 3,
+              cooldown_minutes: 60
+            }
+          };
+        }
+        throw new Error('Failed to fetch alert configuration');
       }
-    });
-    if (!response.ok) {
-      throw new Error('Failed to fetch alert configuration');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching alert config:', error);
+      // Return default config on error
+      return {
+        enabled: false,
+        email_recipients: [],
+        thresholds: {
+          warning_threshold: 0.15,
+          critical_threshold: 0.30,
+          min_anomaly_points: 3,
+          cooldown_minutes: 60
+        }
+      };
     }
-    return response.json();
   },
 
-  async updateAlertConfig(customerId, config) {
+  async setAlertConfig(customerId, config) {
     const response = await fetch(`${BASE_URL}/alerts/config/${customerId}`, {
       method: 'POST',
       headers: {
@@ -101,7 +134,8 @@ const API = {
       body: JSON.stringify(config)
     });
     if (!response.ok) {
-      throw new Error('Failed to update alert configuration');
+      const errorData = await response.json().catch(() => null);
+      throw new Error(errorData?.detail || 'Failed to update alert configuration');
     }
     return response.json();
   }
