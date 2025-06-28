@@ -7,46 +7,50 @@ function App() {
   const [activeTab, setActiveTab] = useState('customers');
 
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>Customer Engagement Dashboard</h1>
-        <div style={{ marginBottom: '2rem' }}>
-          <button
-            onClick={() => setActiveTab('customers')}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: activeTab === 'customers' ? '#1976d2' : '#e0e0e0',
-              color: activeTab === 'customers' ? 'white' : 'black',
-              border: 'none',
-              borderRadius: '4px',
-              marginRight: '1rem',
-              cursor: 'pointer',
-            }}
-          >
-            Customer Analytics
-          </button>
-          <button
-            onClick={() => setActiveTab('reddit')}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: activeTab === 'reddit' ? '#1976d2' : '#e0e0e0',
-              color: activeTab === 'reddit' ? 'white' : 'black',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            Reddit Analytics
-          </button>
+    <div className="app">
+      <header className="app-header">
+        <div className="container">
+          <div className="flex justify-between items-center">
+            <h1 className="text-xl font-bold">
+              <span className="text-primary">Customer</span> Engagement Dashboard
+            </h1>
+            <nav className="main-nav">
+              <button
+                onClick={() => setActiveTab('customers')}
+                className={`nav-link ${activeTab === 'customers' ? 'active' : ''}`}
+              >
+                <i className="icon">📊</i>
+                Customer Analytics
+              </button>
+              <button
+                onClick={() => setActiveTab('reddit')}
+                className={`nav-link ${activeTab === 'reddit' ? 'active' : ''}`}
+              >
+                <i className="icon">🌐</i>
+                Reddit Analytics
+              </button>
+            </nav>
+          </div>
         </div>
       </header>
-      <main>
-        {activeTab === 'customers' ? (
-          <CustomerAnalytics />
-        ) : (
-          <RedditAnalytics />
-        )}
+      
+      <main className="app-main container">
+        <div className="content-wrapper">
+          {activeTab === 'customers' ? (
+            <CustomerAnalytics />
+          ) : (
+            <RedditAnalytics />
+          )}
+        </div>
       </main>
+      
+      <footer className="app-footer">
+        <div className="container">
+          <p className="text-center text-sm">
+            &copy; {new Date().getFullYear()} Customer Engagement Dashboard
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
