@@ -22,11 +22,14 @@ import secrets
 import asyncio
 import hashlib
 import praw
-from prometheus_client import Counter, Histogram, start_http_server
+from prometheus_client import Counter, Histogram, start_http_server, CollectorRegistry, REGISTRY
 from cachetools import TTLCache
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
+# Initialize start time for uptime calculation
+start_time = time.time()
 
 # Load environment variables
 load_dotenv()
@@ -42,7 +45,7 @@ logger = logging.getLogger(__name__)
 DATA_DIR = os.getenv('DATA_DIR', 'data')
 SAMPLE_DATA_FILE = os.getenv('SAMPLE_DATA_FILE', 'sampleData.json')
 ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:5173').split(',')
-API_KEY = os.getenv('API_KEY', 'YOUR-API-KEY')
+API_KEY = os.getenv('API_KEY', 'rIV08bJX2rEKoCeu9fGHd7XVwQkcxA')
 RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', 60))
 MODEL_N_ESTIMATORS = int(os.getenv('MODEL_N_ESTIMATORS', 100))
 MODEL_CONTAMINATION = float(os.getenv('MODEL_CONTAMINATION', 0.2))
@@ -62,18 +65,24 @@ reddit = praw.Reddit(
     user_agent=REDDIT_USER_AGENT
 )
 
-# Prometheus metrics
-REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'])
-REQUEST_LATENCY = Histogram('http_request_duration_seconds', 'HTTP request latency', ['method', 'endpoint'])
-ANOMALY_DETECTION_COUNT = Counter('anomaly_detection_total', 'Total anomaly detection requests')
-CACHE_HIT_COUNT = Counter('cache_hits_total', 'Total cache hits')
-CACHE_MISS_COUNT = Counter('cache_misses_total', 'Total cache misses')
+# Create a custom registry for Prometheus metrics
+custom_registry = CollectorRegistry()
 
-# Start Prometheus metrics server
-start_http_server(METRICS_PORT)
+# Prometheus metrics
+REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'], registry=custom_registry)
+REQUEST_LATENCY = Histogram('http_request_duration_seconds', 'HTTP request latency', ['method', 'endpoint'], registry=custom_registry)
+ANOMALY_DETECTION_COUNT = Counter('anomaly_detection_total', 'Total anomaly detection requests', registry=custom_registry)
+CACHE_HIT_COUNT = Counter('cache_hits_total', 'Total cache hits', registry=custom_registry)
+CACHE_MISS_COUNT = Counter('cache_misses_total', 'Total cache misses', registry=custom_registry)
+
+# Start Prometheus metrics server with custom registry
+start_http_server(METRICS_PORT, registry=custom_registry)
 
 # Caching
 results_cache = TTLCache(maxsize=100, ttl=CACHE_TTL)
+
+# Alert configurations
+alert_configs = {}
 
 # Rate limiting and throttling
 class ThrottlingState:
@@ -303,7 +312,7 @@ SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
 ALERT_FROM_EMAIL = os.getenv('ALERT_FROM_EMAIL', 'alerts@customerengagement.com')
 
 # Alert metrics
-ALERT_COUNT = Counter('anomaly_alerts_total', 'Total anomaly alerts sent', ['severity'])
+ALERT_COUNT = Counter('anomaly_alerts_total', 'Total anomaly alerts sent', ['severity'], registry=custom_registry)
 
 # Alert Models
 class AlertThreshold(BaseModel):
@@ -331,7 +340,6 @@ class AlertResponse(BaseModel):
     timestamp: datetime
 
 # Alert state storage
-alert_configs: Dict[str, AlertConfig] = {}
 alert_history: List[Dict[str, Any]] = []
 
 # Default alert configuration
@@ -608,24 +616,45 @@ async def detect_anomalies(req: AnomalyRequest, customer_id: Optional[str] = Non
 @app.get("/metrics/summary", tags=["Monitoring"])
 async def get_metrics_summary(api_key: str = Depends(verify_api_key)):
     """Get a summary of API metrics"""
-    return {
-        "total_requests": {
-            "get": int(REQUEST_COUNT.labels(method="GET", endpoint="/customers", status=200)._value.get()),
-            "post": int(REQUEST_COUNT.labels(method="POST", endpoint="/detect", status=200)._value.get())
-        },
-        "cache_performance": {
-            "hits": int(CACHE_HIT_COUNT._value.get()),
-            "misses": int(CACHE_MISS_COUNT._value.get()),
-            "hit_ratio": round(
-                int(CACHE_HIT_COUNT._value.get()) / 
-                max(1, int(CACHE_HIT_COUNT._value.get()) + int(CACHE_MISS_COUNT._value.get())) * 100, 
-                2
-            )
-        },
-        "anomaly_detections": int(ANOMALY_DETECTION_COUNT._value.get()),
-        "current_cache_size": len(results_cache),
-        "uptime": time.time() - start_time
-    }
+    try:
+        # Get metrics from custom registry
+        get_requests = REQUEST_COUNT.labels(method="GET", endpoint="/customers", status=200)._value.get()
+        post_requests = REQUEST_COUNT.labels(method="POST", endpoint="/detect", status=200)._value.get()
+        cache_hits = CACHE_HIT_COUNT._value.get()
+        cache_misses = CACHE_MISS_COUNT._value.get()
+        anomaly_detections = ANOMALY_DETECTION_COUNT._value.get()
+        
+        # Handle potential None values
+        get_requests = int(get_requests) if get_requests is not None else 0
+        post_requests = int(post_requests) if post_requests is not None else 0
+        cache_hits = int(cache_hits) if cache_hits is not None else 0
+        cache_misses = int(cache_misses) if cache_misses is not None else 0
+        anomaly_detections = int(anomaly_detections) if anomaly_detections is not None else 0
+        
+        # Calculate hit ratio safely
+        total_cache_requests = cache_hits + cache_misses
+        hit_ratio = round((cache_hits / max(1, total_cache_requests)) * 100, 2)
+        
+        return {
+            "total_requests": {
+                    "get": get_requests,
+                    "post": post_requests
+            },
+            "cache_performance": {
+                    "hits": cache_hits,
+                    "misses": cache_misses,
+                    "hit_ratio": hit_ratio
+            },
+                "anomaly_detections": anomaly_detections,
+            "current_cache_size": len(results_cache),
+            "uptime": time.time() - start_time
+        }
+    except Exception as e:
+        logger.error(f"Error getting metrics summary: {str(e)}")
+        return {
+            "error": "Failed to retrieve metrics",
+            "detail": str(e)
+        }
 
 # New Reddit data endpoint
 @app.get("/reddit/metrics/{subreddit}", response_model=Dict[str, Any], tags=["Reddit"])
@@ -722,8 +751,14 @@ async def get_reddit_metrics(
 
 if __name__ == "__main__":
     import uvicorn
-    start_time = time.time()
     port = int(os.getenv('PORT', 8000))
+    
+    # In development mode, don't start the metrics server again
+    # as it will be started by the FastAPI app
+    if os.getenv('ENVIRONMENT') != 'development':
+        start_http_server(METRICS_PORT, registry=custom_registry)
+        logger.info(f"Metrics server started on port {METRICS_PORT}")
+    
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
